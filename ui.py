@@ -7,23 +7,35 @@ import time
 from tkinter import *
 import requests
 import ast
+from tkinter import ttk
+import tkinter as tk
+from ttkthemes import ThemedTk
+import customtkinter as ctk
+from tkinter import ttk
 
 
-class App:
+class PreApp(ttk.Frame):
     CONFIG_FILE = "config.json"
 
-    def __init__(self):
-        self.toplevel_window = None
-        customtkinter.set_appearance_mode("dark")  # Modes: "System" (standard), "Dark", "Light"
-        customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
+    def __init__(self, parent, tab_name):
+        super().__init__(parent)
+        self.tab_name = tab_name
+        self.create_widgets()
 
-        self.app = customtkinter.CTk()
-        self.app.geometry()
-        self.app.wm_minsize(width=400, height=300)
-        self.app.title("Vault UI")
+    def update_tab_name(self):
+        new_tab_name = f"{self.entries['Vault FI'].get()}:{self.entries['Root Path'].get()}"
+        tab_control = self.master  # Get a reference to the TabbedApplication
+
+        # Find the current tab index
+        current_tab_index = tab_control.index(self)
+
+        # Update the tab name
+        tab_control.tab(current_tab_index, text=new_tab_name)
+
+    def create_widgets(self):
         self.vault_client=None
 
-        self.main_frame_secrets = customtkinter.CTkFrame(master=self.app)
+        self.main_frame_secrets = customtkinter.CTkFrame(master=self)
         self.main_frame_secrets.pack(pady=0, padx=0, expand=True, anchor="center",ipadx=30,ipady=30)
 
         self.title = customtkinter.CTkLabel(master=self.main_frame_secrets, text="Generate Token".upper(),height=28, font=CTkFont(weight="bold", size=14), fg_color="#3B8ED0")
@@ -44,8 +56,49 @@ class App:
 
         self.load_config()
 
-    def generate_token(self):
-        pass
+
+class App(ttk.Frame):
+    CONFIG_FILE = "config.json"
+    secrets_master_map={}
+
+    def __init__(self, parent, tab_name):
+        super().__init__(parent)
+        self.tab_name = tab_name
+        self.create_widgets()
+
+    def update_tab_name(self):
+        new_tab_name = f"{self.entries['Vault FI'].get()}:{self.entries['Root Path'].get()}"
+        tab_control = self.master  # Get a reference to the TabbedApplication
+
+        # Find the current tab index
+        current_tab_index = tab_control.index(self)
+
+        # Update the tab name
+        tab_control.tab(current_tab_index, text=new_tab_name)
+
+    def create_widgets(self):
+        self.vault_client=None
+
+        self.main_frame_secrets = customtkinter.CTkFrame(master=self)
+        self.main_frame_secrets.pack(pady=0, padx=0, expand=True, anchor="center",ipadx=30,ipady=30)
+
+        self.title = customtkinter.CTkLabel(master=self.main_frame_secrets, text="Generate Token".upper(),height=28, font=CTkFont(weight="bold", size=14), fg_color="#3B8ED0")
+        self.title.pack(pady=(0, 10), padx=0, ipady=30, fill='both', expand=True)
+
+        self.entries = dict({})
+        for label, text in [("AWS Credentials", ""), ("Vault FI", ""), ("Root Path", ""), ("Vault Role", "")]:
+            label_this = customtkinter.CTkLabel(master=self.main_frame_secrets, text=label)
+            label_this.pack(pady=(10,0), padx=10, anchor="w")
+            entry = customtkinter.CTkEntry(master=self.main_frame_secrets, width=500, placeholder_text=text)
+            entry.pack(pady=5, padx=10, ipady=8)
+            self.entries[label]=entry
+
+        self.btn_generate_token = customtkinter.CTkButton(
+            master=self.main_frame_secrets, text="Generate", command=self.on_generate_token
+        )
+        self.btn_generate_token.pack(pady=30, padx=10, ipady=8)
+
+        self.load_config()
 
 
 
@@ -116,6 +169,7 @@ class App:
 
 
     def draw_kv(self, combo_kv_list, secrets_master, frame_kv_list):
+        self.update_tab_name()
 
         print(combo_kv_list, secrets_master, frame_kv_list)
         path = combo_kv_list.get().rstrip('/')
@@ -161,7 +215,7 @@ class App:
 
             self.textbox = customtkinter.CTkTextbox(master=self.add_kv_frame_json, width=100000,height=800,corner_radius=0)
             self.textbox.pack(fill="both", expand=True)
-            self.textbox.insert("0.0",self.secrets_master[path])
+            self.textbox.insert("0.0",App.secrets_master_map[self.root_path][path])
 
 
         else:
@@ -185,8 +239,8 @@ class App:
 
             def make_del(path,k):
                 def inner():
-                    print("inner : ",path,k,self.secrets_master)
-                    self.del_kv(path,k,self.secrets_master)
+                    print("inner : ",path,k,App.secrets_master_map[self.root_path])
+                    self.del_kv(path,k,App.secrets_master_map[self.root_path])
                 return inner
             
             def make_update(path,k,value_entry,button_update):
@@ -241,7 +295,7 @@ class App:
     def add_path(self,vault_client,combo_kv_list,secrets_master,frame_kv_list):
         try:
             path=combo_kv_list.get().rstrip('/')
-            if path in self.secrets_master :
+            if path in App.secrets_master_map[self.root_path] :
                 tkinter.messagebox.showinfo("Alert", "Duplicate!")
                 return
 
@@ -252,7 +306,7 @@ class App:
             combo_kv_list.update()
             # tkinter.messagebox.showinfo("Success", "The Vault path has been added.")
             self.button_add_path.configure(text='\u2714')
-            self.app.after(3000, lambda: self.button_add_path.configure(text='+'))
+            self.after(3000, lambda: self.button_add_path.configure(text='+'))
             self.draw_kv(self.combo_kv_list, secrets_master, self.frame_kv_list)
 
             
@@ -296,7 +350,7 @@ class App:
                 combo_kv_list.update()
                 combo_kv_list.set('***Deleted***')
                 self.button_remove_path.configure(text='\u2714')
-                self.app.after(3000, lambda: self.button_remove_path.configure(text=' - '))
+                self.after(3000, lambda: self.button_remove_path.configure(text=' - '))
             else:
                 tkinter.messagebox.showerror("Error", "Error : There was an error deleting the Vault path.")
 
@@ -327,7 +381,7 @@ class App:
             
             # Add the new key-value pair to the existing secrets
             existing_secrets[key] = value
-            self.secrets_master[path]=existing_secrets
+            App.secrets_master_map[self.root_path][path]=existing_secrets
             print("after:",secrets_master)
 
             # Write the updated secrets back to the Vault path
@@ -355,7 +409,7 @@ class App:
 
             # Add the new key-value pair to the existing secrets
             del(existing_secrets[key])
-            self.secrets_master[path]=existing_secrets
+            App.secrets_master_map[self.root_path][path]=existing_secrets
             print("after:",secrets_master)
 
             # Write the updated secrets back to the Vault path
@@ -376,14 +430,14 @@ class App:
         
         try:          
             # Get the existing secrets at the path, if any
-            existing_secrets = self.secrets_master[path]
+            existing_secrets = App.secrets_master_map[self.root_path][path]
             value=value_entry.get()
-            print("before:",self.secrets_master, f"k={key} v={value} path={path}")
+            print("before:",App.secrets_master_map[self.root_path], f"k={key} v={value} path={path}")
 
             # Add the new key-value pair to the existing secrets
             existing_secrets[key]=value
-            self.secrets_master[path]=existing_secrets
-            print("after:",self.secrets_master)
+            App.secrets_master_map[self.root_path][path]=existing_secrets
+            print("after:",App.secrets_master_map[self.root_path])
 
             # Write the updated secrets back to the Vault path
             vault_client.secrets.kv.v2.create_or_update_secret(
@@ -391,7 +445,7 @@ class App:
                 secret=existing_secrets
             )
 
-            # self.draw_kv(self.combo_kv_list, self.secrets_master, self.frame_kv_list)
+            # self.draw_kv(self.combo_kv_list, App.secrets_master_map[self.root_path], self.frame_kv_list)
             update_button.configure(text='\u2714', state="disabled")
 
 
@@ -404,10 +458,10 @@ class App:
 
     def show_json(self, vault_client, combo_kv_list):
         path = combo_kv_list.get()
-        json_data = self.secrets_master[path]
+        json_data = App.secrets_master_map[self.root_path][path]
 
         if self.toplevel_window is None or not self.toplevel_window.winfo_exists():
-            self.toplevel_window = ToplevelWindow(self.app)  # create window if its None or destroyed
+            self.toplevel_window = ToplevelWindow(self)  # create window if its None or destroyed
             customtkinter.CTkLabel(master=self.toplevel_window,text=path).pack()
 
 
@@ -446,18 +500,18 @@ class App:
 
         try:
             self.client=self.get_falcon_vault_client(addr=self.vault_addr,vault_role=vault_role,  access_key=access_key,secret_key=secret_key,token=token)
-            self.secrets_master=self.get_secrets_from_vault(vault_client=self.client, path=root_path)
+            App.secrets_master_map[self.root_path]=self.get_secrets_from_vault(vault_client=self.client, path=root_path)
         except Exception as e:
             tkinter.messagebox.showerror('Error', f'Error generating token : {e}')
 
-        print(self.secrets_master)
+        print(App.secrets_master_map[self.root_path])
         print(self.client.token)
 
 
         # Save input values to config file
         self.save_config(input_values)
             # Create a new frame for the new page
-        self.frame_2 = customtkinter.CTkFrame(master=self.app,width=1000)
+        self.frame_2 = customtkinter.CTkFrame(master=self,width=1000)
         
 
         self.frame_2.pack(pady=0, padx=0, fill='both', expand=True, anchor="w",ipadx=30,ipady=30)
@@ -472,7 +526,7 @@ class App:
         self.main_frame_secrets.pack_forget()
         self.frame_path_list_and_buttons = customtkinter.CTkFrame(master=self.frame_2)
         self.frame_path_list_and_buttons.pack(pady=0, padx=0, fill='y',ipady=30,ipadx=30)
-        self.combo_kv_list = customtkinter.CTkComboBox(master=self.frame_path_list_and_buttons, values=list(self.secrets_master.keys()), width=500)
+        self.combo_kv_list = customtkinter.CTkComboBox(master=self.frame_path_list_and_buttons, values=list(App.secrets_master_map[self.root_path].keys()), width=500)
         self.combo_kv_list.pack(side='left',pady=5, padx=10)
         self.button_get_kv = customtkinter.CTkButton(master=self.frame_path_list_and_buttons, text="Get KV's",width=3)
         self.button_get_kv.pack( side='left',pady=0, padx=1)
@@ -486,10 +540,10 @@ class App:
 
         self.frame_kv_list = customtkinter.CTkScrollableFrame(master=self.frame_2)
         self.frame_kv_list.pack(pady=10, padx=10, fill='both', expand=True, anchor="n",ipadx=30, ipady=30)
-        self.button_get_kv.configure(command=lambda :self.draw_kv(self.combo_kv_list,self.secrets_master,self.frame_kv_list))
-        self.button_add_path.configure(command=lambda :self.add_path( self.client,  self.combo_kv_list,self.secrets_master,self.frame_kv_list))
-        self.button_remove_path.configure(command=lambda :self.del_path( self.client,  self.combo_kv_list,self.secrets_master,self.frame_kv_list))
-        self.combo_kv_list.bind('<Return>', command=lambda event:self.draw_kv(self.combo_kv_list,self.secrets_master,self.frame_kv_list))
+        self.button_get_kv.configure(command=lambda :self.draw_kv(self.combo_kv_list,App.secrets_master_map[self.root_path],self.frame_kv_list))
+        self.button_add_path.configure(command=lambda :self.add_path( self.client,  self.combo_kv_list,App.secrets_master_map[self.root_path],self.frame_kv_list))
+        self.button_remove_path.configure(command=lambda :self.del_path( self.client,  self.combo_kv_list,App.secrets_master_map[self.root_path],self.frame_kv_list))
+        self.combo_kv_list.bind('<Return>', command=lambda event:self.draw_kv(self.combo_kv_list,App.secrets_master_map[self.root_path],self.frame_kv_list))
         # self.button_show_json.configure(command=lambda :self.show_json( self.vault_client,self.combo_kv_list))
 
 
@@ -499,12 +553,14 @@ class App:
 
         def switch_event():
             print("switch toggled, current value:", self.switch_var.get())
-            self.draw_kv(self.combo_kv_list, self.secrets_master, self.frame_kv_list)
+            self.draw_kv(self.combo_kv_list, App.secrets_master_map[self.root_path], self.frame_kv_list)
            
 
         switch_1 = customtkinter.CTkSwitch(master=self.frame_path_list_and_buttons, text="JSON", command=switch_event,
                                         variable=self.switch_var, onvalue="on", offvalue="off")
         switch_1.pack(side='left',pady=0, padx=20)
+
+        self.update_tab_name()
 
 
     def load_config(self):
@@ -521,8 +577,60 @@ class App:
             json.dump(input_values, f)
 
     def run(self):
-        self.app.mainloop()
+        self.mainloop()
 
 
-app = App()
-app.run()
+# app = App()
+# app.run()
+
+
+class TabbedApplication(ThemedTk):
+    def __init__(self):
+        super().__init__(theme="black")
+        self.title("Vault UI")
+        customtkinter.set_appearance_mode("dark")  # Modes: "System" (standard), "Dark", "Light"
+        customtkinter.set_default_color_theme("blue") 
+        style = ttk.Style()
+        style.configure("CustomTab.TNotebook", tabmargins=[0, 0, 0, 0])  # Remove the tab margins
+        style.configure("CustomTab.TNotebook.Tab", padding=(12, 8), relief=tk.FLAT)
+        style.configure("CustomTab.TNotebook.Tab", borderwidth=0)
+
+
+        self.notebook = ttk.Notebook(self,style="CustomTab.TNotebook")
+
+        main_app = App(self.notebook,tab_name="x")
+        self.notebook.add(main_app, text="New*")
+
+        self.notebook.pack(expand=True, fill="both")
+
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
+
+        # style = ctk.CTkStyle()
+        # style.configure("AddButton.TButton", font=("TkDefaultFont", 8))
+
+        self.add_tab_button = ctk.CTkButton(
+            self.notebook,
+            text="+",
+            # style="AddButton.TButton",
+            command=self.add_tab,
+        )
+        self.notebook.insert(0, self.add_tab_button, text="+")  # Insert the '+' tab at index 0
+        
+        
+
+    def on_tab_changed(self, event):
+        current_tab_index = self.notebook.index(ctk.CURRENT)
+        if current_tab_index == self.notebook.index(self.add_tab_button):
+            self.add_tab()
+        self.update_idletasks()
+
+    def add_tab(self):
+        new_tab = App(self.notebook,'y')
+        # tab_name = f"New Tab {self.notebook.index(self.add_tab_button)}"
+        tab_name = "New*"
+        self.notebook.insert(ctk.END, new_tab, text=tab_name)
+        self.notebook.select(new_tab)
+
+if __name__ == "__main__":
+    app = TabbedApplication()
+    app.mainloop()
